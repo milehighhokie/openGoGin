@@ -1,0 +1,98 @@
+{{ template "header.html" .}}
+
+<h1>{{ .title }}</h1>
+<div id="content"></div>
+<script type="text/babel">
+  var AuditApp = React.createClass({
+    render: function() {
+      return <form id="audit" onSubmit={this.updateData}>
+              <div id="header">
+                <h2>{this.state.resource}</h2>
+                <div><label>Requested by</label><div><a href={'http://sherlock/search.php?search=' + this.state.requestor + '&type=id'}>{this.state.requestor}</a></div></div>
+                <div><label>Quarter</label><div>{this.state.quarter}</div></div>
+                <div><label>Group/system</label><div>{this.state.group}</div></div>
+                <div><label>Resource Name</label><div>{this.state.resource}</div></div>
+                <div><label>Due by (date)</label><div>{this.state.due_by}</div></div>
+                <div>
+                  <label>Approvers</label>
+                  <ul>
+                    {this.state.approvers.map(approver =>
+                      <li>{approver.name} ({approver.id})</li>
+                    )}
+                  </ul>
+                  <h3>Add approvers</h3>
+                  <p className="info">One or more people who control access to the resource above (space/newline/comma seperated) - can be numeric employee ID or LAN ID</p>
+                  <textarea name="delegated_approvers" onChange={this.updateList} />
+                </div>
+                <label for="users">Users</label>
+                <ul>
+                  {this.state.users.map(user =>
+                    <li>{user.name} (<a href={'http://sherlock/search.php?search=' + user.id + '&type=id'} target="_blank">{user.id}</a>)
+                      <span className="rad"><input type="radio" name={user.id + '-approve'} value="approve" checked={user.approval_status == "approve"} onChange={this.changeApproval} /> Approve</span>
+                      <span className="rad"><input type="radio" name={user.id + '-approve'} value="deny" checked={user.approval_status == "deny"} onChange={this.changeApproval} /> Remove</span>
+                      {user.reviewed_by != "" &&
+                        <span>Approved by <a href={'http://sherlock/search.php?search=' + user.reviewed_by + '&type=id'} target="_blank">{user.reviewed_by}</a> on {user.reviewed_on}</span>
+                      }
+                    </li>
+                  )}
+                </ul>
+
+               </div>
+               <div id="footer">
+                 <button className="btn">Save Changes</button>
+               </div>
+             </form>;
+    },
+    getInitialState: function() {
+      return {resource: 'loading...', users:[], approvers:[]}
+    },
+    componentDidMount: function() {
+      $.ajax({
+            url: "/api/audit/" + window.location.pathname.split("/").pop(),
+            dataType: 'json',
+            cache: false,
+            success: function(data) {
+              console.log(data)
+                this.setState(data);
+            }.bind(this),
+            error: function(xhr, status, err) {
+                console.error(this.props.url, status, err.toString());
+            }.bind(this)
+        });
+    },
+    changeApproval: function(e) {
+      var user = e.target.name.split('-')[0];
+      var value = e.target.value;
+      console.log("user: " + user + " value: " + value);
+      this.setState((prevState, _) => {
+        prevState.users.find(u => u.id == user).approval_status = value;
+      });
+    },
+    updateList: function(e) {
+      var updatedField = {}
+      var ids = e.target.value.replace(/\,/,' ').trim().split(/\s+/);
+      updatedField[e.target.name] = ids.map(id => {return {id: id}});
+      this.setState(updatedField);
+    },
+    updateData: function(e) {
+      e.preventDefault();
+      $.ajax({
+        type: "PUT",
+        url: "/api/audit/" + window.location.pathname.split("/").pop(),
+        dataType: 'json',
+        contentType: "application/json",
+        data: JSON.stringify({
+          delegated_approvers: this.state.delegated_approvers,
+          users: this.state.users
+        }),
+        success: function(data) {
+          console.log(data)
+          this.setState(data);
+        }.bind(this)
+      })
+    }
+  });
+
+  ReactDOM.render(<AuditApp />, document.getElementById('content'));
+</script>
+{{ template "footer.html" .}}

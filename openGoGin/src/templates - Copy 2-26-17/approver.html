@@ -1,0 +1,33 @@
+{{ template "header.html" .}}
+
+<h1>{{ .title }}</h1>
+<div id="content"></div>
+<script type="text/babel">
+var ApproverApp = React.createClass({
+      render: function() {
+	  return <Griddle results={this.state.approver} showFilter={true} showSettings={true} />
+		//return <Griddle results={this.state.approver} columns={["Audit number", "Create TS", "Requestor", "Quarter", "Due Date", "Resource", "Number of Approvers", "Number of Users", "Complete?", "Resource Group"]}/>
+      },
+      getInitialState: function() {
+        return {approver:[]}
+      },
+      componentDidMount: function() {
+        $.ajax({
+              url: "/api/approver/" + window.location.pathname.split("/").pop(),
+              dataType: 'json',
+              cache: false,
+              success: function(data) {
+                console.log(data)
+                  this.setState({approver: data});
+              }.bind(this),
+              error: function(xhr, status, err) {
+                  console.error(this.props.url, status, err.toString());
+              }.bind(this)
+          });
+      }
+  });
+
+  ReactDOM.render(<ApproverApp />, document.getElementById('content'));
+</script>
+
+{{ template "footer.html" .}}

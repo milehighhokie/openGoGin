@@ -1,0 +1,119 @@
+{{ template "header.html" .}}
+
+<h1>{{ .title }}</h1>
+<div id="content"></div>
+<script type="text/babel">
+const options = {
+  onRowClick: function(row) {
+    var url="/audit/show/" + row.id;
+    location.href=url;
+    return false;
+  }
+};
+var EmpApp = React.createClass({
+  render: function() {
+      return <form id="employee">
+              <div id="header">
+                <h2>{this.state.name}</h2>
+                <div><label>ID:</label>{this.state.id}</div>
+                <div><label>LAN:</label><a href={'http://sherlock/search.php?search=' + this.state.lan + '&type=id'}>{this.state.lan}</a></div>
+                <div><label>Location:</label>{this.state.storeid}{this.state.store}</div>
+                <div><label>Department:</label>{this.state.dept}</div>
+                <div><label>Job class:</label>{this.state.jobclass}</div>
+                <div><label>Job title:</label>{this.state.jobtitle}</div>
+                <div><label>Email:</label>{this.state.email}</div>
+                <div><label>Manager:</label>{this.state.manager}</div>
+                <div><label>Manager email:</label>{this.state.manageremail}</div>
+
+                <h3>Requested Audits</h3>
+                <BootstrapTable
+                data={ this.state.requests }
+                options={ options }
+                >
+                       <TableHeaderColumn dataField='id' width='4%' isKey>ID</TableHeaderColumn>
+                       <TableHeaderColumn dataField='group' width='150px' dataSort>Group</TableHeaderColumn>
+                       <TableHeaderColumn dataField='resource' width='250px' dataSort>Resource</TableHeaderColumn>
+                       <TableHeaderColumn dataField='datecreated' width='250px' dataSort>Created</TableHeaderColumn>
+                       <TableHeaderColumn dataField='due_by' width='12%' dataSort>Due By</TableHeaderColumn>
+                       <TableHeaderColumn dataField='done' width='6%' dataSort>Complete?</TableHeaderColumn>
+                       <TableHeaderColumn dataField='approvers' width='4%'>Approvers</TableHeaderColumn>
+                       <TableHeaderColumn dataField='users' width='4%'>Users</TableHeaderColumn>
+                   </BootstrapTable>
+
+                   <h3>Audits where you are or were an approver</h3>
+                   <BootstrapTable
+                   data={ this.state.approvals }
+                   options={ options }
+                   >
+                          <TableHeaderColumn dataField='id' width='4%' isKey>ID</TableHeaderColumn>
+                          <TableHeaderColumn dataField='group' width='150px' dataSort>Group</TableHeaderColumn>
+                          <TableHeaderColumn dataField='resource' width='250px' dataSort>Resource</TableHeaderColumn>
+                          <TableHeaderColumn dataField='datecreated' width='250px' dataSort>Created</TableHeaderColumn>
+                          <TableHeaderColumn dataField='due_by' width='12%' dataSort>Due By</TableHeaderColumn>
+                          <TableHeaderColumn dataField='done' width='6%' dataSort>Complete?</TableHeaderColumn>
+                          <TableHeaderColumn dataField='approvers' width='4%'>Approvers</TableHeaderColumn>
+                          <TableHeaderColumn dataField='users' width='4%'>Users</TableHeaderColumn>
+                      </BootstrapTable>
+                </div>
+             </form>;
+    },
+      getInitialState: function() {
+        return {employee: 'loading...', employee:[]}
+      },
+      componentDidMount: function() {
+        var empID = window.location.pathname.split("/").pop();
+        $.ajax({
+            url: "/api/audit?requestor=" + empID,
+            dataType: 'json',
+            cache: false,
+            success: function(audits) {
+                console.log(audits)
+                var requestorGroup = []
+                if (audits === null) {
+                  requestorGroup.requests = []
+              }  else {
+                requestorGroup.requests = audits
+              }
+                this.setState(requestorGroup)
+              }.bind(this),
+              error: function(xhr, status, err) {
+                  console.error(this.props.url, status, err.toString())
+              }.bind(this)
+          });
+          $.ajax({
+              url: "/api/approver/" + empID,
+              dataType: 'json',
+              cache: false,
+              success: function(audits2) {
+                  console.log(audits2)
+                  var approvalsGroup = []
+                  if (audits2 === null) {
+                    approvalsGroup.approvals = []
+                  } else {
+                    approvalsGroup.approvals = audits2
+                  }
+                  this.setState(approvalsGroup)
+                }.bind(this),
+                error: function(xhr, status, err) {
+                    console.error(this.props.url, status, err.toString())
+                }.bind(this)
+            });
+        $.ajax({
+              url: "/api/employee/" + empID,
+              dataType: 'json',
+              cache: false,
+              success: function(data) {
+                console.log(data)
+                  this.setState(data);
+              }.bind(this),
+              error: function(xhr, status, err) {
+                  console.error(this.props.url, status, err.toString());
+              }.bind(this)
+          });
+      }
+  });
+
+  ReactDOM.render(<EmpApp />, document.getElementById('content'));
+</script>
+
+{{ template "footer.html" .}}

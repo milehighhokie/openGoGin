@@ -1,0 +1,106 @@
+package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func GetDept(employeeDeptID int) (dept string) {
+	row := db.QueryRow("select deptDesc from department where deptID = ?;", employeeDeptID)
+	err := row.Scan(&dept)
+
+	if err != nil {
+		fmt.Println(err)
+		dept = "Unknown"
+	}
+	return
+}
+
+func GetJobClass(employeeJobClassID int) (jobClass string) {
+	row := db.QueryRow("select jobClassDesc from jobclass where jobClassID = ?;", employeeJobClassID)
+	err := row.Scan(&jobClass)
+
+	if err != nil {
+		fmt.Println(err)
+		jobClass = "Unknown"
+	}
+	return
+}
+
+func GetJobTitle(employeeJobTitleID int) (jobTitle string) {
+	row := db.QueryRow("select jobTitleDesc from jobtitle where jobTitleID = ?;", employeeJobTitleID)
+	err := row.Scan(&jobTitle)
+
+	if err != nil {
+		fmt.Println(err)
+		jobTitle = "Unknown"
+	}
+	return
+}
+
+func GetEmployeeStore(employeeStoreID int) (store string) {
+	row := db.QueryRow("select storeDesc from store where storeID = ?;", employeeStoreID)
+	err := row.Scan(&store)
+
+	if err != nil {
+		fmt.Println(err)
+		store = "Unknown"
+	}
+	return
+}
+
+func GetEmployeeType(employeeTypeID int) (typeName string) {
+	row := db.QueryRow("select EmpTypeDesc from emptype where EmpTypeID = ?;", employeeTypeID)
+	err := row.Scan(&typeName)
+
+	if err != nil {
+		fmt.Println(err)
+		typeName = "Unknown"
+	}
+	return
+}
+
+func GetEmployeeManager(employeeManagerID int) (mgrName, mgrEmail string) {
+	row := db.QueryRow("select employeeName, employeeEmail from employee where employeeID = ?;", employeeManagerID)
+	err := row.Scan(&mgrName, &mgrEmail)
+
+	if err != nil {
+		fmt.Println(err)
+		mgrName = "Unknown"
+		mgrEmail = "Unknown"
+	}
+	return
+}
+
+func GetEmployeeName(employeeID string) (name string) {
+	name = ""
+	employeeIDInt, err := strconv.Atoi(employeeID)
+	if err == nil {
+		row := db.QueryRow("select employeeName from employee where employeeID=?;", employeeIDInt)
+		err = row.Scan(&name)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+	} else {
+		row := db.QueryRow("select employeeName from employee where employeeLAN=? and employeeLAN is not null;", employeeID)
+		err = row.Scan(&name)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+	}
+	return
+}
+
+/*
+func GetEmployeeAccess(employeeManagerID int) (access []UserPermission) {
+	var singleAccess UserPermission
+	singleAccess.EmployeeID = 8784183
+	singleAccess.Permission = "Report Center"
+	singleAccess.Status = "Pending"
+	singleAccess.DecisionDate = "2016-12-12 12:12:12.121212"
+	singleAccess.DecisionEmpID = 8390635
+
+	access = append(access, singleAccess)
+	return
+}
+*/

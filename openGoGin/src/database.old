@@ -1,0 +1,690 @@
+package main
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	_ "github.com/go-sql-driver/mysql"
+)
+
+var db *sql.DB
+
+// all the database calls in on script to clean up main. still a mess
+func DatabaseCall() {
+	var err error
+	//db, err = sql.Open("mysql", "root:dol5PIN_@tcp(instaquar.c7b1493plokd.us-west-2.rds.amazonaws.com:3306)/instaquar")
+	db, err = sql.Open("mysql", "root:dol5PIN_@tcp(127.0.0.1:3306)/instaquar")
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db.Close()
+
+	err = db.Ping()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	router := gin.Default()
+
+	router.LoadHTMLGlob("templates/*.html")
+
+	router.GET("/", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "index.html", gin.H{
+			"title": "Welcome to InstaQUAR",
+		})
+	})
+
+	router.Static("/assets", "./assets")
+	router.StaticFile("/favicon.ico", "./assets/favicon.ico")
+
+	router.GET("/audit/create", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "create_audit.html", gin.H{
+			"title": "Create an Audit",
+		})
+	})
+
+	router.GET("/audit/show/:id", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "audit.html", gin.H{
+			"title": "View Audit",
+		})
+	})
+
+	// GET a employee detail
+	router.GET("/employee/:id", func(c *gin.Context) {
+		var (
+			employee Employee
+			result   gin.H
+		)
+		id := c.Param("id")
+		row := db.QueryRow("select employeeID, employeeLAN, employeeName, employeeEmail, employeeDept, employeeStore, employeeManager, employeeJobClass, employeeJobTitle, employeeType from employee where employeeID = ?;", id)
+		err = row.Scan(&employee.EmployeeID, &employee.EmployeeLAN, &employee.EmployeeName, &employee.EmployeeEmail, &employee.EmployeeDeptID, &employee.EmployeeStoreID,
+			&employee.EmployeeManagerID, &employee.EmployeeJobClassID, &employee.EmployeeJobTitleID, &employee.EmployeeTypeID)
+
+		if err != nil {
+			fmt.Println(err)
+			// If no results send null
+			result = gin.H{
+				"employee": nil,
+				"title":    "employee not found",
+			}
+		} else {
+			employee.EmployeeDept = GetDept(employee.EmployeeDeptID)
+			employee.EmployeeJobClass = GetJobClass(employee.EmployeeJobClassID)
+			employee.EmployeeJobTitle = GetJobTitle(employee.EmployeeJobTitleID)
+			employee.EmployeeStore = GetEmployeeStore(employee.EmployeeStoreID)
+			employee.EmployeeType = GetEmployeeType(employee.EmployeeTypeID)
+			employee.EmployeeManager, employee.EmployeeManagerEmail = GetEmployeeManager(employee.EmployeeManagerID)
+
+			result = gin.H{
+				"employee": employee,
+				//				"access":   access,
+				"title": employee.EmployeeName,
+			}
+		}
+		c.HTML(http.StatusOK, "employee.html", result)
+	})
+
+	// POST new employee details
+	router.POST("/employee", func(c *gin.Context) {
+		id := c.PostForm("employeeID")
+		name := c.PostForm("employeeName")
+		lan := c.PostForm("employeeLAN")
+		email := c.PostForm("employeeEmail")
+		dept := c.PostForm("employeeDept")
+		store := c.PostForm("employeeStore")
+		mgr := c.PostForm("employeeManager")
+		class := c.PostForm("employeeJobClass")
+		jobType := c.PostForm("employeeJobTitle")
+		empType := c.PostForm("employeeType")
+
+		stmt, err := db.Prepare("insert into employee (employeeID, employeeLAN, employeeName, employeeEmail, employeeDept, employeeStore, employeeManager, employeeJobClass, employeeJobTitle, employeeType) values (?,?,?,?,?,?,?,?,?,?);")
+		if err != nil {
+			fmt.Println(err.Error())
+		} else {
+			_, err = stmt.Exec(id, name, lan, email, dept, store, mgr, class, jobType, empType)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"message": fmt.Sprintf(" %s successfully created", name),
+		})
+	})
+	//
+	// PUT - Create audit
+	router.POST("/api/audit", func(c *gin.Context) {
+		var request Request
+		var requestResponse RequestResponse
+		var x []byte
+		x, _ = ioutil.ReadAll(c.Request.Body)
+		err := json.Unmarshal(x, &request)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+		fmt.Println(request)
+		requestor := request.Requestor
+		quarter := request.Quarter
+		due_by := request.Due_By
+		resource := request.Resource
+		approvers := request.Approvers
+		users := request.Users
+		resourceGroup := request.ResourceGroup
+
+		t := time.Now()
+		timeNow := t.String()
+
+		stmt, err := db.Prepare("insert into request (requestor, quarter, due_by, resource, date_created, done, resource_group) values (?,?,?,?,?,false,?);")
+		if err != nil {
+			fmt.Println("1:" + err.Error())
+		}
+		_, err = stmt.Exec(requestor, quarter, due_by, resource, timeNow, resourceGroup)
+		if err != nil {
+			fmt.Println("2:" + err.Error())
+		}
+
+		var requestID int
+		row := db.QueryRow("select requestID from request where requestor=? and quarter=? and due_by=? and resource=? and date_created=? and resource_group=? ;", requestor, quarter, due_by, resource, timeNow, resourceGroup)
+		err = row.Scan(&requestID)
+		if err != nil {
+			fmt.Println("3:" + err.Error())
+		} else {
+			requestResponse.DateCreated = timeNow
+			requestResponse.Done = false
+			requestResponse.Due_By = due_by
+			requestResponse.ID = requestID
+			requestResponse.Quarter = quarter
+			requestResponse.Requestor = requestor
+			requestResponse.Resource = resource
+			requestResponse.ResourceGroup = resourceGroup
+
+			for i, _ := range approvers {
+				stmt, err := db.Prepare("insert into requestApprovers (requestID, approverID, delegate) values (?,?,false);")
+				if err != nil {
+					fmt.Println("4:" + err.Error())
+				}
+				_, err = stmt.Exec(requestID, string(approvers[i].ID))
+				if err != nil {
+					fmt.Println("5:" + err.Error())
+				}
+
+				approverInt, err := strconv.Atoi(string(approvers[i].ID))
+				var name string = ""
+				if err == nil {
+					row := db.QueryRow("select employeeName from employee where employeeID=?;", approverInt)
+					err = row.Scan(&name)
+					if err != nil {
+						fmt.Println("6:" + err.Error())
+					}
+				} else {
+					row := db.QueryRow("select employeeName from employee where employeeLAN=? and employeeLAN is not null;", string(approvers[i].ID))
+					err = row.Scan(&name)
+					if err != nil {
+						fmt.Println("7:" + err.Error())
+					}
+				}
+				var nextApprover = ReqRespApprover{string(approvers[i].ID), name, false}
+				requestResponse.Approvers = append(requestResponse.Approvers, nextApprover)
+			}
+
+			for i, _ := range users {
+				stmt, err := db.Prepare("insert into requestUsers (requestID, userID, approval_status, reviewed_on, reviewed_by) values (?,?,null,null,null);")
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+				_, err = stmt.Exec(requestID, string(users[i].ID))
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+				userInt, err := strconv.Atoi(string(users[i].ID))
+				var name string = ""
+				var status string = ""
+				if err == nil {
+					row := db.QueryRow("select employeeName, empTypeDesc from employee, emptype where employeeID=? and employeeType = empTypeId;", userInt)
+					err = row.Scan(&name, &status)
+					if err != nil {
+						fmt.Println(err.Error())
+					}
+				} else {
+					row := db.QueryRow("select employeeName, empTypeDesc from employee, emptype where employeeLAN=? and employeeType = empTypeId and employeeLAN is not null;", string(users[i].ID))
+					err = row.Scan(&name, &status)
+					if err != nil {
+						fmt.Println(err.Error())
+					}
+				}
+				var nextUser = ReqRespUser{string(users[i].ID), name, false, "", "", strings.Contains(status, "Ex-")}
+				requestResponse.Users = append(requestResponse.Users, nextUser)
+			}
+		}
+
+		c.JSON(http.StatusOK, requestResponse)
+	})
+
+	// GET - Pull audit info for a given ID
+	router.GET("/api/audit/:id", func(c *gin.Context) {
+		var requestResponse RequestResponse
+		id := c.Param("id")
+
+		var date_created string
+		var done bool
+		var due_by, quarter, requestor, resource, resourceGroup string
+		row := db.QueryRow("select date_created, requestor, quarter, due_by, resource, done, resource_group from request where requestID = ?;", id)
+		err = row.Scan(&date_created, &requestor, &quarter, &due_by, &resource, &done, &resourceGroup)
+		if err != nil {
+			fmt.Println("3:" + err.Error())
+		} else {
+			requestResponse.DateCreated = date_created
+			requestResponse.Done = done
+			requestResponse.Due_By = due_by
+			requestResponse.ID, err = strconv.Atoi(id)
+			requestResponse.Quarter = quarter
+			requestResponse.Requestor = requestor
+			requestResponse.Resource = resource
+			requestResponse.ResourceGroup = resourceGroup
+
+			rows, err := db.Query("select approverID, delegate from requestApprovers where requestID = ?;", id)
+			if err != nil {
+				fmt.Println(err.Error())
+			} else {
+				var nextApprover ReqRespApprover
+				for rows.Next() {
+					err = rows.Scan(&nextApprover.Approver, &nextApprover.Delegate)
+					approverInt, err := strconv.Atoi(string(nextApprover.Approver))
+					var name string = ""
+					if err == nil {
+						row := db.QueryRow("select employeeName from employee where employeeID=?;", approverInt)
+						err = row.Scan(&name)
+						if err != nil {
+							fmt.Println("6:" + err.Error())
+						}
+					}
+					row := db.QueryRow("select employeeName from employee where employeeLAN=? and employeeLAN is not null;", string(nextApprover.Approver))
+					err = row.Scan(&name)
+					if err != nil {
+						fmt.Println("7:" + err.Error())
+					}
+
+					nextApprover.Name = name
+					requestResponse.Approvers = append(requestResponse.Approvers, nextApprover)
+				}
+			}
+			defer rows.Close()
+
+			rows, err = db.Query("select userID, approval_status, reviewed_on, reviewed_by from requestUsers where requestID = ?;", id)
+			if err != nil {
+				fmt.Println(err.Error())
+			} else {
+				var nextUser ReqRespUser
+				for rows.Next() {
+					err = rows.Scan(&nextUser.User, &nextUser.Approval_status, &nextUser.Reviewed_on, &nextUser.Reviewed_by)
+					approverInt, err := strconv.Atoi(string(nextUser.User))
+					var name string = ""
+					if err == nil {
+						row := db.QueryRow("select employeeName from employee where employeeID=?;", approverInt)
+						err = row.Scan(&name)
+						if err != nil {
+							fmt.Println("6:" + err.Error())
+						}
+					} else {
+						row := db.QueryRow("select employeeName from employee where employeeLAN=? and employeeLAN is not null;", string(nextUser.User))
+						err = row.Scan(&name)
+						if err != nil {
+							fmt.Println("7:" + err.Error())
+						}
+					}
+					nextUser.Name = name
+					requestResponse.Users = append(requestResponse.Users, nextUser)
+				}
+			}
+			defer rows.Close()
+		}
+		c.JSON(http.StatusOK, requestResponse)
+	})
+
+	// GET - Pull audit info for all based on done flag
+	router.GET("/api/audit", func(c *gin.Context) {
+		var requestList []RequestList
+		var nextRequest RequestList
+		doneParm := c.DefaultQuery("done", "%")
+		groupParm := c.DefaultQuery("group", "%")
+		requestorParm := c.DefaultQuery("requestor", "%")
+		resourceParm := c.DefaultQuery("resource", "%")
+		quarterParm := c.DefaultQuery("quarter", "%")
+		dueByParm := c.DefaultQuery("due_by", "%")
+
+		var date_created string
+		var done bool = strings.Contains(doneParm, "true")
+		var due_by, quarter, requestor, resource, resourceGroup string
+		var requestID int
+		rows, err := db.Query("select date_created, requestor, quarter, due_by, resource, requestID, resource_group, done from request where done like ? and resource_group like ? and requestor like ? and quarter like ? and resource like ? and due_by like ?;", done, groupParm, requestorParm, quarterParm, resourceParm, dueByParm)
+		for rows.Next() {
+			err = rows.Scan(&date_created, &requestor, &quarter, &due_by, &resource, &requestID, &resourceGroup, &done)
+			if err != nil {
+				fmt.Println("3:" + err.Error())
+			} else {
+				nextRequest.DateCreated = date_created
+				nextRequest.Done = done
+				nextRequest.Due_By = due_by
+				nextRequest.ID = requestID
+				nextRequest.Quarter = quarter
+				nextRequest.Requestor = requestor
+				nextRequest.Resource = resource
+				nextRequest.ResourceGroup = resourceGroup
+
+				var idCount int
+				row := db.QueryRow("select count(*) from requestApprovers where requestID = ?;", requestID)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+				err = row.Scan(&idCount)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+				nextRequest.Approvers = idCount
+
+				row = db.QueryRow("select count(*) from requestUsers where requestID = ?;", requestID)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+				err = row.Scan(&idCount)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+				nextRequest.Users = idCount
+
+				requestList = append(requestList, nextRequest)
+			}
+		}
+		defer rows.Close()
+		c.JSON(http.StatusOK, requestList)
+	})
+
+	// GET - Pull audit info for all based on done flag
+	/*	router.GET("/api/audit/group/:group", func(c *gin.Context) {
+			var requestList []RequestList
+			var nextRequest RequestList
+			resourceGroup := c.Param("group")
+			var date_created string
+			var done bool
+			var due_by, quarter, requestor, resource string
+			var requestID int
+			rows, err := db.Query("select date_created, requestor, quarter, due_by, resource, requestID, done from request where resource_group = ?;", resourceGroup)
+			if err != nil {
+				fmt.Println("2.5:" + err.Error())
+			}
+			for rows.Next() {
+				err = rows.Scan(&date_created, &requestor, &quarter, &due_by, &resource, &requestID, &done)
+				if err != nil {
+					fmt.Println("3:" + err.Error())
+				} else {
+					nextRequest.DateCreated = date_created
+					nextRequest.Done = done
+					nextRequest.Due_By = due_by
+					nextRequest.ID = requestID
+					nextRequest.Quarter = quarter
+					nextRequest.Requestor = requestor
+					nextRequest.Resource = resource
+					nextRequest.ResourceGroup = resourceGroup
+
+					var idCount int
+					row := db.QueryRow("select count(*) from requestApprovers where requestID = ?;", requestID)
+					if err != nil {
+						fmt.Println(err.Error())
+					}
+					err = row.Scan(&idCount)
+					if err != nil {
+						fmt.Println(err.Error())
+					}
+					nextRequest.Approvers = idCount
+
+					row = db.QueryRow("select count(*) from requestUsers where requestID = ?;", requestID)
+					if err != nil {
+						fmt.Println(err.Error())
+					}
+					err = row.Scan(&idCount)
+					if err != nil {
+						fmt.Println(err.Error())
+					}
+					nextRequest.Users = idCount
+
+					requestList = append(requestList, nextRequest)
+				}
+			}
+			defer rows.Close()
+			c.JSON(http.StatusOK, requestList)
+		})
+	*/
+	// GET - Pull audit info for given approver
+	router.GET("/approver/:id", func(c *gin.Context) {
+		var requestList []RequestList
+		var nextRequest RequestList
+		var respApprover ReqRespApprover
+		approver := c.Param("id")
+		respApprover.Approver = approver
+		respApprover.Name = GetEmployeeName(approver)
+
+		var date_created string
+		var done bool
+		var due_by, quarter, resource, requestor, resourceGroup string
+		var requestID int
+
+		rows, err := db.Query("select date_created, done, quarter, due_by, resource, request.requestID, requestor, resource_group from request, requestApprovers where request.requestID = requestApprovers.requestID and requestApprovers.approverID = ?;", approver)
+		if err != nil {
+			fmt.Println("2.5:" + err.Error())
+		}
+		for rows.Next() {
+			err = rows.Scan(&date_created, &done, &quarter, &due_by, &resource, &requestID, &requestor, &resourceGroup)
+			if err != nil {
+				fmt.Println("3:" + err.Error())
+			} else {
+				nextRequest.DateCreated = date_created
+				nextRequest.Done = done
+				nextRequest.Due_By = due_by
+				nextRequest.ID = requestID
+				nextRequest.Quarter = quarter
+				nextRequest.Requestor = requestor
+				nextRequest.Resource = resource
+				nextRequest.ResourceGroup = resourceGroup
+
+				var idCount int
+				row := db.QueryRow("select count(*) from requestApprovers where requestID = ?;", requestID)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+				err = row.Scan(&idCount)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+				nextRequest.Approvers = idCount
+
+				row = db.QueryRow("select count(*) from requestUsers where requestID = ?;", requestID)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+				err = row.Scan(&idCount)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+				nextRequest.Users = idCount
+
+				requestList = append(requestList, nextRequest)
+			}
+		}
+		defer rows.Close()
+		c.JSON(http.StatusOK, requestList)
+	})
+
+	// GET - Pull audit info for given requestor
+	/*	router.GET("/requestor/:id", func(c *gin.Context) {
+
+			var nextRequest RequestList
+			var totalReq RR
+
+			requestor := c.Param("id")
+			totalReq.Requestor.ID = requestor
+			totalReq.Requestor.Name = GetEmployeeName(requestor)
+			var date_created string
+			var done bool
+			var due_by, quarter, resource, resourceGroup string
+			var requestID int
+			rows, err := db.Query("select date_created, done, quarter, due_by, resource, requestID, resource_group from request where requestor = ?;", requestor)
+			if err != nil {
+				fmt.Println("2.5:" + err.Error())
+			}
+			for rows.Next() {
+				err = rows.Scan(&date_created, &done, &quarter, &due_by, &resource, &requestID, &resourceGroup)
+				if err != nil {
+					fmt.Println("3:" + err.Error())
+				} else {
+					nextRequest.DateCreated = date_created
+					nextRequest.Done = done
+					nextRequest.Due_By = due_by
+					nextRequest.ID = requestID
+					nextRequest.Quarter = quarter
+					nextRequest.Requestor = requestor
+					nextRequest.Resource = resource
+					nextRequest.ResourceGroup = resourceGroup
+
+					var idCount int
+					row := db.QueryRow("select count(*) from requestApprovers where requestID = ?;", requestID)
+					if err != nil {
+						fmt.Println(err.Error())
+					}
+					err = row.Scan(&idCount)
+					if err != nil {
+						fmt.Println(err.Error())
+					}
+					nextRequest.Approvers = idCount
+					row = db.QueryRow("select count(*) from requestUsers where requestID = ?;", requestID)
+					if err != nil {
+						fmt.Println(err.Error())
+					}
+					err = row.Scan(&idCount)
+					if err != nil {
+						fmt.Println(err.Error())
+					}
+					nextRequest.Users = idCount
+
+					totalReq.Audits = append(totalReq.Audits, nextRequest)
+				}
+			}
+			defer rows.Close()
+
+			c.JSON(http.StatusOK, totalReq)
+
+		})
+	*/
+	/*
+	   type AuditUpdate struct {
+	   	Decisions []Decisions `json:"users"`
+	   	Delegates []string    `json:"delegated_approvers"`
+	   }
+
+	   type Decisions struct {
+	   	ID              int    `json:"id"`
+	   	Approval_Status string `json:"approval_status"`
+	   }
+
+	   type DecisionResult struct {
+	   	DecisionResults []DecisionResults `json:"users"`
+	   	Done            bool              `json:"done"`
+	   	Delegates       []DelegateResults `json:"delegated_approvers"`
+	   }
+	*/
+	// PUT - add an approver
+	router.PUT("/api/audit/:id", func(c *gin.Context) {
+		id := c.Param("id")
+		var x []byte
+		x, _ = ioutil.ReadAll(c.Request.Body)
+		var auditUpdate AuditUpdate
+		err := json.Unmarshal(x, &auditUpdate)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+		fmt.Println(auditUpdate)
+
+		requestID := id
+		approver := "10933349"
+		decisions := auditUpdate.Decisions
+		delegates := auditUpdate.Delegates
+
+		var auditResults AuditResults
+		var nextDelegateResult DelegateResults
+
+		for i := range delegates {
+			nextDelegateResult.ID = delegates[i]
+			stmt, err := db.Prepare("insert into requestApprover (requestID, approverID, delegate) values (?,?,true);")
+			if err != nil {
+				fmt.Println(err.Error())
+			} else {
+				_, err = stmt.Exec(id, delegates[i])
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+			}
+			nextDelegateResult.Name = GetEmployeeName(delegates[i])
+			auditResults.DelegateResult = append(auditResults.DelegateResult, nextDelegateResult)
+		}
+
+		var nextDecisionResult DecisionResults
+		// pull user decisions from JSON & update requestUser and build userRights
+		// check if all decisions have been made
+		//    if so, close out request - send to archive table
+		// either way send back JSON
+		for i := range decisions {
+			nextDecisionResult.ID = decisions[i].ID
+			nextDecisionResult.Approval_Status = decisions[i].Approval_Status
+			nextDecisionResult.Reviewed_By = "10933349"
+			t := time.Now()
+			nextDecisionResult.Reviewed_On = t.String()
+			auditResults.DecisionResult = append(auditResults.DecisionResult, nextDecisionResult)
+			stmt, err := db.Prepare("update requestUser set approval_status = ?, reviewed_on = ?, reviewed_by = ? where requestID=? and userID = ?;")
+			if err != nil {
+				fmt.Println(err.Error())
+			} else {
+				_, err = stmt.Exec(decisions[i].Approval_Status, nextDecisionResult.Reviewed_On, approver, id, decisions[i].ID)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+			}
+		}
+
+		var nullCount int
+		row := db.QueryRow("select count(*) from requestUsers where requestID = ? and reviewed_on = null;", requestID)
+		if err != nil {
+			fmt.Println(err.Error())
+		} else {
+			err = row.Scan(&nullCount)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+		}
+
+		if nullCount == 0 {
+			stmt, err := db.Prepare("update request set done = true where requestID= ?;")
+			if err != nil {
+				fmt.Println(err.Error())
+			} else {
+				_, err = stmt.Exec(requestID)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+			}
+			auditResults.Done = true
+		} else {
+			auditResults.Done = false
+		}
+
+		c.JSON(http.StatusOK, auditResults)
+
+	})
+
+	// PUT - update a employee details
+	router.PUT("/employee", func(c *gin.Context) {
+		var x []byte
+		x, _ = ioutil.ReadAll(c.Request.Body)
+		var employee Employee
+		err := json.Unmarshal(x, &employee)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+		id := employee.EmployeeID
+		name := employee.EmployeeName
+
+		stmt, err := db.Prepare("update employee set employeeName= ? where employeeID= ?;")
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+		_, err = stmt.Exec(name, id)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+
+		c.JSON(http.StatusOK, employee)
+	})
+
+	// Delete resources - /employee?idemployee=99999
+	router.DELETE("/employee", func(c *gin.Context) {
+		id := c.Query("id")
+
+		stmt, err := db.Prepare("delete from employee where employeeID= ?;")
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+		_, err = stmt.Exec(id)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"message": fmt.Sprintf("Successfully deleted employee: %s", id),
+		})
+	})
+
+	router.Run(":8080")
+}

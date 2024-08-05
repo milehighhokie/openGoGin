@@ -1,0 +1,36 @@
+<!--menu.html-->
+
+<nav class="navbar navbar-default">
+  <div class="container">
+    <div class="navbar-header">
+      <a class="navbar-brand" href="/">
+        InstaQUAR
+      </a>
+    </div>
+    <div class="collapse navbar-collapse">
+      <ul class="nav navbar-nav">
+        <li><a href="/audit/create">Create Audit</a></li>
+      </ul>
+
+      <script>
+    	  function processEmployee()  {
+          var url="/employee/" + document.getElementById("employeeID").value;
+          location.href=url;
+          return false;
+          }
+      //
+      //  function processManager()  {
+      //     var url="/manager/" + document.getElementById("manageridin").value;
+      //     location.href=url;
+      //     return false;
+      //     }
+      </script>
+      <form onSubmit="return processEmployee();" class="navbar-form navbar-right" role="search">
+        Employee Lookup: <input style="width: 9em" type="text" name="employeeID" id="employeeID" class="form-control" placeholder="1234 or xabc"> <button class="btn"><span class="glyphicon glyphicon-search"></span></button>
+      </form>
+      <!-- <form onSubmit="return processManager();" class="navbar-form navbar-right" role="search">
+      Manager Lookup: <input type="text" name="manageridin" id="manageridin" placeholder="1234 or xabc"> <button class="btn">go</button>
+      </form> -->
+    </div>
+  </div>
+</nav>

@@ -1,0 +1,61 @@
+{{ template "header.html" .}}
+
+<h1>{{ .title }}</h1>
+<div id="content"></div>
+<script type="text/babel">
+  var AuditApp = React.createClass({
+    render: function() {
+      return <form id="audit" onSubmit={this.create}>
+               <div id="header">
+                 <div className="form-group"><label for="requestor">Requested by</label><input className="form-control" name="requestor" value={this.state.requestor} onChange={this.updateState} /></div>
+                 <div className="form-group"><label for="quarter">Quarter</label><input className="form-control" name="quarter" value={this.state.quarter} onChange={this.updateState} /></div>
+                 <div className="form-group"><label for="group">Group/system</label><input className="form-control" name="group" value={this.state.group} onChange={this.updateState} /></div>
+                 <div className="form-group"><label for="resource">Resource Name</label><input className="form-control" name="resource" value={this.state.resource} onChange={this.updateState} /></div>
+                 <div className="form-group"><label for="due_by">Due by (date)</label><input className="form-control" name="due_by" value={this.state.due_by} onChange={this.updateState} /></div>
+                 <div>
+                   <label for="approvers">Approvers</label>
+                   <p className="info">One or more people who control access to the resource above (space/newline/comma seperated) - can be numeric employee ID or LAN ID <a href="http://spyglass/SearchType.aspx?type=person">Lookup ID</a></p>
+                   <textarea className="form-control" name="approvers" onChange={this.updateList}>YSVH</textarea>
+                 </div>
+                 <label for="users">Users</label>
+                 <p className="info">A list of users with access to the resource above (space/newline/comma seperated) - can be numeric employee ID or LAN ID</p>
+                 <textarea className="form-control" name="users" onChange={this.updateList}>BBQ9</textarea>
+                </div>
+                <div id="footer">
+                  <input className="btn" type="submit" value="Create Audit" />
+                </div>
+              </form>;
+    },
+    getInitialState: function() {
+      return {requestor:"x3mc", group: 'My App', resource: 'Administrator Role', quarter:'2016-11', due_by:'2016-11-30', approvers: [{id:"YSVH"}], users: [{id:"BBQ9"}]};
+    },
+    updateState: function(e) {
+      var updatedField = {}
+      updatedField[e.target.name] = e.target.value;
+      this.setState(updatedField);
+    },
+    updateList: function(e) {
+      var updatedField = {}
+      var ids = e.target.value.replace(/\,/,' ').trim().split(/\s+/);
+      updatedField[e.target.name] = ids.map(id => {return {id: id}});
+      this.setState(updatedField);
+    },
+    create: function(e) {
+      e.preventDefault();
+      console.log(this.state);
+      $.post(
+        "/api/audit",
+        JSON.stringify(this.state),
+        function(data) {
+          console.log(data);
+          window.location = "/audit/show/" + data.id;
+        }
+      );
+    }
+  });
+
+  ReactDOM.render(<AuditApp />, document.getElementById('content'));
+</script>
+
+
+{{ template "footer.html" .}}

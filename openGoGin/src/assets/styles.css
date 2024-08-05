@@ -1,0 +1,47 @@
+body {
+    background-color: lightgray;
+}
+
+span.rad {
+  padding-left: 2em
+}
+
+.navbar-brand {
+  font-family: 'Fugaz One', serif;
+}
+
+.navbar-right {
+  margin-right: 0;
+}
+
+#content {
+  background-color: #eee;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 0 1em 1em 1em;
+}
+
+#content input.form-control {
+  width: 15em;
+}
+
+#content form {
+  margin-top: 1em;
+}
+
+.banner-logo {
+  font-family: 'Fugaz One', serif;
+  font-size: 8em;
+  text-align: center;
+}
+
+.tagline, .learn-more {
+  font-size: 3em;
+  text-align: center;
+}
+
+footer {
+  margin-top: 2em;
+  color: #888;
+  text-align: center;
+}

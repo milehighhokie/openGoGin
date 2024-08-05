@@ -1,0 +1,109 @@
+package dbcalls
+
+import (
+	"database/sql"
+	"fmt"
+	"strconv"
+
+	_ "github.com/go-sql-driver/mysql"
+)
+
+func LookupDept(employeeDeptID int, db *sql.DB) (dept string) {
+	row := db.QueryRow("select deptDesc from department where deptID = ?;", employeeDeptID)
+	err := row.Scan(&dept)
+
+	if err != nil {
+		fmt.Println(err)
+		dept = "Unknown"
+	}
+	return
+}
+
+func LookupJobClass(employeeJobClassID int, db *sql.DB) (jobClass string) {
+	row := db.QueryRow("select jobClassDesc from jobclass where jobClassID = ?;", employeeJobClassID)
+	err := row.Scan(&jobClass)
+
+	if err != nil {
+		fmt.Println(err)
+		jobClass = "Unknown"
+	}
+	return
+}
+
+func LookupJobTitle(employeeJobTitleID int, db *sql.DB) (jobTitle string) {
+	row := db.QueryRow("select jobTitleDesc from jobtitle where jobTitleID = ?;", employeeJobTitleID)
+	err := row.Scan(&jobTitle)
+
+	if err != nil {
+		fmt.Println(err)
+		jobTitle = "Unknown"
+	}
+	return
+}
+
+func LookupStore(employeeStoreID int, db *sql.DB) (store string) {
+	row := db.QueryRow("select storeDesc from store where storeID = ?;", employeeStoreID)
+	err := row.Scan(&store)
+
+	if err != nil {
+		fmt.Println(err)
+		store = "Unknown"
+	}
+	return
+}
+
+func LookupEmployeeType(employeeTypeID int, db *sql.DB) (typeName string) {
+	row := db.QueryRow("select EmpTypeDesc from emptype where EmpTypeID = ?;", employeeTypeID)
+	err := row.Scan(&typeName)
+
+	if err != nil {
+		fmt.Println(err)
+		typeName = "Unknown"
+	}
+	return
+}
+
+func LookupManager(employeeManagerID int, db *sql.DB) (mgrName, mgrEmail string) {
+	row := db.QueryRow("select employeeName, employeeEmail from employee where employeeID = ?;", employeeManagerID)
+	err := row.Scan(&mgrName, &mgrEmail)
+
+	if err != nil {
+		fmt.Println(err)
+		mgrName = "Unknown"
+		mgrEmail = "Unknown"
+	}
+	return
+}
+
+func LookupName(employeeID string, db *sql.DB) (name string) {
+	name = ""
+	employeeIDInt, err := strconv.Atoi(employeeID)
+	if err == nil {
+		row := db.QueryRow("select employeeName from employee where employeeID=?;", employeeIDInt)
+		err = row.Scan(&name)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+	} else {
+		row := db.QueryRow("select employeeName from employee where employeeLAN=? and employeeLAN is not null;", employeeID)
+		err = row.Scan(&name)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+	}
+	return
+}
+
+/*
+func LookupEmployeeAccess(employeeManagerID int, db *sql.DB) (access []UserPermission) {
+	var singleAccess UserPermission
+	singleAccess.EmployeeID = 8784183
+	singleAccess.Permission = "Report Center"
+	singleAccess.Status = "Pending"
+	singleAccess.DecisionDate = "2016-12-12 12:12:12.121212"
+	singleAccess.DecisionEmpID = 8390635
+
+	access = append(access, singleAccess)
+	return
+}
+*/
